@@ -93,19 +93,15 @@ $$
 #### B. Gradient Coefficients  
 Coefficients for the shape function gradients (using standard linear triangular shape functions):
 
-For an element with nodes $$(x_1, y_1), (x_2, y_2), (x_3, y_3)$$
-
-These are the coefficients:
 $$
-\begin{aligned}
+\begin{align*}
 b_1 &= y_2 - y_3 \\
 b_2 &= y_3 - y_1 \\
 b_3 &= y_1 - y_2 \\
-\\
 c_1 &= x_3 - x_2 \\
 c_2 &= x_1 - x_3 \\
 c_3 &= x_2 - x_1
-\end{aligned}
+\end{align*}
 $$
 
 #### C. Local Matrix Assembly
