@@ -4,14 +4,38 @@ import matplotlib.patches as patches
 from pathlib import Path
 
 def read_nodes(filename):
-    return np.loadtxt(filename)
+    """Read nodes file. Expect two columns: x, y."""
+    with open(filename, 'r') as f:
+        first_line = f.readline().strip()
+        if ',' in first_line:
+            delimiter = ','
+        else:
+            delimiter = None
+            
+    return np.loadtxt(filename, delimiter=delimiter)
 
 def read_elements(filename):
-    elements = np.loadtxt(filename, dtype=int, delimiter=',')
+    """Read triangle elements. Expect three 1-based integer columns."""
+    with open(filename, 'r') as f:
+        first_line = f.readline().strip()
+        if ',' in first_line:
+            delimiter = ','
+        else:
+            delimiter = None
+            
+    elements = np.loadtxt(filename, dtype=int, delimiter=delimiter)
     return (elements - 1).astype(int)
 
 def read_bcs(filename):
-    data = np.loadtxt(filename)
+    """Read Dirichlet BC file. Expect two columns: node_id, value."""
+    with open(filename, 'r') as f:
+        first_line = f.readline().strip()
+        if ',' in first_line:
+            delimiter = ','
+        else:
+            delimiter = None
+            
+    data = np.loadtxt(filename, delimiter=delimiter)
     if data.ndim == 1:
         data = data.reshape(1, -1)
     node_ids = data[:, 0].astype(int) - 1
@@ -19,6 +43,7 @@ def read_bcs(filename):
     return node_ids, values
 
 def plot_mesh_nodes_bcs(nodes_file, elements_file, bc_file, out_file):
+    """Plot nodes and elements with Dirichlet BCs."""
     nodes = read_nodes(nodes_file)
     elements = read_elements(elements_file)
     bc_nodes, bc_values = read_bcs(bc_file)
@@ -58,6 +83,7 @@ def plot_mesh_nodes_bcs(nodes_file, elements_file, bc_file, out_file):
     plt.close()
 
 def calculate_element_stiffness_matrix(element_nodes, k=1.0, t=1.0):
+    """Calculate the 3x3 element stiffness matrix for a linear 3-node triangular element."""
     xy = np.asarray(element_nodes, dtype=float)
     x1, y1 = xy[0]
     x2, y2 = xy[1]
@@ -91,6 +117,7 @@ def calculate_global_stiffness_matrix(nodes_file, elements_file, k=1.0, t=1.0):
     return K
 
 def apply_dirichlet_bcs(K, F, bc_nodes, bc_values):
+    """Apply Dirichlet boundary conditions."""
     K_mod = K.copy()
     F_mod = F.copy()
     
@@ -109,6 +136,7 @@ def apply_dirichlet_bcs(K, F, bc_nodes, bc_values):
     return K_mod, F_mod
 
 def solve_fem(nodes_file, elements_file, bc_file, k=1.0, t=1.0, q_v=0.0):
+    """Solve the FEM heat transfer problem."""
     nodes = read_nodes(nodes_file)
     elements = read_elements(elements_file)
     bc_nodes, bc_values = read_bcs(bc_file)
@@ -129,6 +157,7 @@ def solve_fem(nodes_file, elements_file, bc_file, k=1.0, t=1.0, q_v=0.0):
     return T, nodes, elements
 
 def calculate_heat_flux(nodes, elements, T, k=1.0):
+    """Calculate heat flux for each element."""
     heat_fluxes = []
     element_centers = []
     
@@ -159,51 +188,34 @@ def calculate_heat_flux(nodes, elements, T, k=1.0):
     
     return np.array(heat_fluxes), np.array(element_centers)
 
-def plot_results(nodes, elements, T, heat_fluxes, element_centers, out_file):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+def plot_results(nodes, elements, T, heat_fluxes, element_centers, base_name):
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
     
-    for elem in elements:
-        triangle = nodes[elem]
-        tri = patches.Polygon(triangle, fill=False, edgecolor='black', linewidth=0.5)
-        ax1.add_patch(tri)
+    tri_plot = ax1.tripcolor(nodes[:, 0], nodes[:, 1], elements, T, cmap='turbo', shading='gouraud')
     
-    tri_plot = ax1.tricontourf(nodes[:, 0], nodes[:, 1], T, levels=15, cmap='YlOrRd')
-    plt.colorbar(tri_plot, ax=ax1, label='Temperature (°C)')
+    ax1.triplot(nodes[:, 0], nodes[:, 1], elements, color='black', linewidth=0.5, alpha=0.5)
+    
+    cbar1 = plt.colorbar(tri_plot, ax=ax1, label='Temperature (°C)')
     
     ax1.set_xlabel('X', fontsize=12)
     ax1.set_ylabel('Y', fontsize=12)
-    ax1.set_title('Temperature Distribution', fontsize=14, fontweight='bold')
+    ax1.set_title('Temperature Distribution (Linear Gradients)', fontsize=14, fontweight='bold')
     ax1.set_aspect('equal', adjustable='box')
-    ax1.grid(True, alpha=0.3)
+    ax1.grid(False)
     
-    for elem in elements:
-        triangle = nodes[elem]
-        tri = patches.Polygon(triangle, fill=False, edgecolor='black', linewidth=0.5)
-        ax2.add_patch(tri)
-    
-    ax2.quiver(element_centers[:, 0], element_centers[:, 1],
-              heat_fluxes[:, 0], heat_fluxes[:, 1],
-              scale=50, width=0.005, color='blue', alpha=0.7)
-    
-    ax2.set_xlabel('X', fontsize=12)
-    ax2.set_ylabel('Y', fontsize=12)
-    ax2.set_title('Heat Flux Vectors (j = -k∇T)', fontsize=14, fontweight='bold')
-    ax2.set_aspect('equal', adjustable='box')
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(out_file, dpi=150, bbox_inches='tight')
-    print(f"Results plot saved to {out_file}")
-    plt.close()
+    out_file_2d = f"{base_name}_results.png"
+    plt.savefig(out_file_2d, dpi=150, bbox_inches='tight')
+    print(f"Results plot saved to {out_file_2d}")
+    plt.close(fig1)
 
 def main():
     base_dir = Path(__file__).resolve().parent
     
-    nodes_file = base_dir / "v8_motor_nodes_2D.txt"
-    elements_file = base_dir / "v8_motor_triangles_2D.txt"
-    bc_file = base_dir / "v8_motor_g_bc_hot_2D.txt"
-    
-    plot_mesh_nodes_bcs(nodes_file, elements_file, bc_file, str(base_dir / "v8_mesh_plot.png"))
+    nodes_file = base_dir / "figure1_example_nodes_2D.txt"
+    elements_file = base_dir / "figure1_example_triangles_2D.txt"
+    bc_file = base_dir / "figure1_example_g_bc_2D.txt"
+
+    plot_mesh_nodes_bcs(nodes_file, elements_file, bc_file, str(base_dir / "mesh_plot.png"))
     
     T, nodes, elements = solve_fem(nodes_file, elements_file, bc_file, k=1.0)
     
@@ -220,7 +232,37 @@ def main():
         magnitude = np.linalg.norm(flux)
         print(f"Element {i+1}: jx={flux[0]:.3f}, jy={flux[1]:.3f}, |j|={magnitude:.3f} W/m²")
     
-    plot_results(nodes, elements, T, heat_fluxes, element_centers, str(base_dir / "v8_results_plot.png"))
+    base_output_name = str(base_dir / "figure1")
+    plot_results(nodes, elements, T, heat_fluxes, element_centers, base_output_name)
 
 if __name__ == "__main__":
     main()
+
+"""
+ALGORITHM OVERVIEW:
+
+The logic follows these Finite Element Method (FEM) steps:
+
+1.  Input Phase:
+    -   Read 2D node coordinates (geometry).
+    -   Read triangle connectivity (elements that link nodes).
+    -   Read boundary conditions (fixed temperatures at specific nodes).
+
+2.  Stiffness Matrix Assembly:
+    -   For each triangular element, calculate a local 3x3 stiffness matrix based on its area using linear basis functions.
+    -   Sum these local matrices into a global K matrix (NxN) that represents the system's total thermal resistance.
+
+3.  Apply Boundary Conditions:
+    -   Enforce the known temperatures (Dirichlet conditions).
+    -   Modify the Global K matrix and Force vector F using the "modify diagonal" method:
+        -   Zero out the row and column associated with fixed nodes.
+        -   Place 1.0 on the diagonal.
+        -   Adjust the Force vector to maintain mathematical consistency for the known values.
+
+4.  Solution:
+    -   Solve the linear system of equations K * T = F to find the unknown temperature T at every node.
+
+5.  Post-Processing:
+    -   Compute the temperature gradient (change in T over distance) for each element to find the heat flux vector (-k * grad(T)).
+    -   Generate visualizations (temperature colormaps with Gouraud shading and heat flux vectors).
+"""
